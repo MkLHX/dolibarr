@@ -15,10 +15,10 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
- use Luracast\Restler\RestException;
+use Luracast\Restler\RestException;
 
- require_once DOL_DOCUMENT_ROOT.'/product/class/product.class.php';
- require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
+require_once DOL_DOCUMENT_ROOT . '/categories/class/categorie.class.php';
 
 /**
  * API class for products
@@ -29,7 +29,7 @@
 class Products extends DolibarrApi
 {
     /**
-     * @var array   $FIELDS     Mandatory fields, checked when create and update object
+     * @var array $FIELDS Mandatory fields, checked when create and update object
      */
     static $FIELDS = array(
         'ref',
@@ -46,8 +46,8 @@ class Products extends DolibarrApi
      */
     function __construct()
     {
-		global $db, $conf;
-		$this->db = $db;
+        global $db, $conf;
+        $this->db = $db;
         $this->product = new Product($this->db);
     }
 
@@ -340,7 +340,7 @@ class Products extends DolibarrApi
 		}
 
 		if ($result < 0) {
-			throw new RestException(503, 'Error when retrieve category list : '.array_merge(array($categories->error), $categories->errors));  
+			throw new RestException(503, 'Error when retrieve category list : '.array_merge(array($categories->error), $categories->errors));
 		}
 
 		return $result;
@@ -460,6 +460,73 @@ class Products extends DolibarrApi
     	);
     }
 
+
+    /**
+     * Get product's pictures by product reference
+     *
+     * @param string $ref Reference of product
+     * @param bool $debug Debug mode
+     *
+     * @return mixed
+     *
+     * @throws 401
+     * @throws 400
+     *
+     * @url GET {ref}/pictures
+     */
+    function getPicturesUrl($ref, $debug = false)
+    {
+        $ref = trim($ref);
+        //root path of the picture -- is dolibarr document folder
+        $picturesRootPath = DOL_DATA_ROOT . '/produit/' . $ref;
+        //symbolic link dest to htdocs
+        $picturesSymlink = DOL_DOCUMENT_ROOT . '/products_pictures';
+        $productPicturesPath = $picturesSymlink . '/' . $ref;
+
+        //Check user right to read product -- base on user right product to see pictures
+        if (!DolibarrApiAccess::$user->rights->produit->lire) {
+            throw new RestException(401);
+        }
+
+        //Check if symbolic link exist -- if not create it
+        if (!linkinfo($picturesSymlink) or linkinfo($picturesSymlink) == 0) {
+            $logs[] = 'create products_pictures symbolic link';
+            $linked = symlink($picturesRootPath, $picturesSymlink);
+            ($linked) ? $logs[] = 'symbolic link created' : $logs[] = 'symbolic link NOT created';
+        }
+
+        //Read pictures files for product ref
+        if ($handle = opendir($productPicturesPath)) {
+            $logs[] = 'open pictures folder : ' . $productPicturesPath;
+            while (false !== ($file = readdir($handle))) {
+                $pathInfo = pathinfo($picturesSymlink . '/' . $file);
+                if (preg_match('/jpg|png|jpeg|gif/', $pathInfo['extension'])) {
+                    $logs[] = 'picture file find : ' . $file;
+                    $urls[] = DOL_MAIN_URL_ROOT . '/products_pictures/' . $ref . '/' . $file;
+                }
+            }
+            $logs[] = 'All pictures files are read in : ' . $productPicturesPath;
+            closedir($handle);
+        }
+
+        if (count($urls) == 0) {
+            throw new RestException(204, 'No content, this no pictures for this product : ' . $ref);
+        }
+
+        //return list of pictures
+        $return = array(
+            'success' => array(
+                'code' => 200,
+                'urls' => $urls,
+            )
+        );
+
+        if ($debug) {
+            $return['logs'] = $logs;
+        }
+
+        return $return;
+    }
 
     /**
      * Clean sensible object datas
