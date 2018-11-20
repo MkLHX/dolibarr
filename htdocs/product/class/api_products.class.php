@@ -508,7 +508,7 @@ class Products extends DolibarrApi
 
         return $return;
     }
-    
+
     /**
      * Clean sensible object datas
      *
